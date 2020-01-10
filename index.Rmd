@@ -1,0 +1,76 @@
+---
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = T, message = F, warning = F, fig.path = 'figures/')
+
+library(dataRetrieval)
+library(rnoaa)
+library(purrr)
+library(tidyverse)
+library(tbeptools)
+library(patchwork)
+
+start <- "2019-01-01"
+end <- "2019-12-31"
+
+pth <- 'T:/03_BOARDS_COMMITTEES/05_TBNMC/BAY_TARGETS/2019_update/data-raw/epchc.xlsx '
+
+chldat <- read_importwq(pth, download_latest_epchc = F)
+
+# key for noaa data
+mykey <- Sys.getenv("NOAA_KEY")
+
+# get rainfll data at station
+tia_rainfall <- ncdc(datasetid = "GHCND", stationid = "GHCND:USW00012842",
+                     datatypeid = "PRCP", startdate = start, enddate = end,
+                     limit = 500, add_units = TRUE, token = mykey)
+
+# convert rain data to inches data to inches
+tia_rain <- tia_rainfall$data %>%
+             mutate(daily_in = value/254,
+                    Date = as.Date(date))
+
+# get hydrological data
+bkr<- readNWISdv("02307359", "00060", start, end) %>%
+      renameNWISColumns() %>%
+      mutate(bkr_flow = (Flow-(mean(Flow)))*0.892998604)
+
+otb_hydr <- left_join(tia_rain, bkr, by=c("Date")) %>%
+            select(Date, daily_in, bkr_flow) %>%
+            mutate(hyd_est = 154.22+(8.12*bkr_flow)+(6.73*daily_in))
+```
+
+
+```{r fig.height = 7, fig.width = 8}
+
+p1 <- show_boxplot(chldat, bay_segment = 'OTB', yrrng = c(1975, 2019)) +
+  theme(
+    axis.text.x = element_blank()
+  )
+
+p2 <- ggplot(otb_hydr, aes(x=Date, y=hyd_est)) +
+  geom_point(alpha=0) +
+  geom_hline(aes(yintercept = min(otb_hydr$hyd_est))) +
+  geom_linerange(aes(x=Date, ymax=otb_hydr$hyd_est, ymin=min(otb_hydr$hyd_est))) +
+  scale_x_date(date_breaks = '1 month', date_labels = '%b') +
+  theme(
+    axis.title.x = element_blank(),
+    panel.background = element_rect(fill = '#ECECEC'),
+    panel.grid.minor=element_blank(),
+    panel.grid.major=element_blank(),
+    legend.position = 'top',
+    legend.background = element_rect(fill=NA),
+    legend.key = element_rect(fill = '#ECECEC'),
+    legend.title = element_blank(),
+    axis.text.x = element_text(angle = 45, size = 8, hjust = 1)
+  ) +
+  labs(
+    y = "Hydrologic Load\n(mill m3)"
+  )
+
+p1 + p2 + plot_layout(ncol = 1, heights = c(1, 0.3))
+```
