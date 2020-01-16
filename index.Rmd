@@ -11,8 +11,11 @@ library(dataRetrieval)
 library(rnoaa)
 library(purrr)
 library(tidyverse)
+library(lubridate)
 library(tbeptools)
 library(patchwork)
+library(ggbeeswarm
+        )
 
 start <- "2019-01-01"
 end <- "2019-12-31"
@@ -51,6 +54,77 @@ p1 <- show_boxplot(chldat, bay_segment = 'OTB', yrrng = c(1975, 2019)) +
   theme(
     axis.text.x = element_blank()
   )
+
+bay_segment <- 'OTB'
+yrrng <- c(1975, 2019)
+ptsz <- 2
+
+# default targets from data file
+trgs <- targets
+yrsel <- max(yrrng)
+
+# monthly averages
+aves <- anlz_avedat(chldat) %>%
+  .$'mos' %>%
+  dplyr::filter(var %in% 'mean_chla') %>%
+  dplyr::filter(bay_segment == !!bay_segment) %>%
+  dplyr::mutate(
+    var = 'yval',
+    mo = month(mo, label = T)
+  )
+
+# axis label
+axlab <- expression("Mean Monthly Chlorophyll-a ("~ mu * "g\u00B7L"^-1 *")")
+
+# get lines to plot
+thrnum <- trgs %>%
+  dplyr::filter(bay_segment %in% !!bay_segment) %>%
+  dplyr::pull(chla_thresh)
+
+# threshold label
+trglab <- paste(thrnum, "~ mu * g%.%L^{-1}")
+
+# bay segment plot title
+ttl <- trgs %>%
+  dplyr::filter(bay_segment %in% !!bay_segment) %>%
+  dplyr::pull(name)
+
+# toplo1 is all but current year
+toplo1 <- aves %>%
+  dplyr::filter(yr >= yrrng[1] & yr <= yrrng[2]) %>%
+  dplyr::filter(!yr %in% yrsel) %>% 
+  mutate(
+    yrcat = case_when(
+      yr < 2008 ~ '1975-2007', 
+      yr >= 2008 ~ '2008-2018'
+    )
+  )
+
+# toplo2 is current year
+toplo2 <- aves %>%
+  dplyr::filter(yr %in% yrsel)
+
+p1 <- ggplot() +
+  geom_boxplot(data = toplo1, aes(x = mo, y = val), outlier.colour = NA) +
+  geom_beeswarm(data = toplo1, aes(x = mo, y = val, colour = yrcat), size = ptsz, alpha = 0.6) +
+  geom_point(data = toplo2, aes(x = mo, y = val, fill = '2019'), pch = 21, color = 'black', size = 4, alpha = 0.7) +
+  geom_hline(aes(yintercept = thrnum, linetype = '+2 se'), colour = 'blue') +
+  geom_text(aes(x = factor('Jan'), max(aves$val)), parse = TRUE, label = trglab, hjust = 0.2, vjust = 1, colour = 'blue') +
+  labs(y = axlab, title = ttl) +
+  theme(axis.title.x = element_blank(),
+        panel.grid.minor=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.background = element_rect(fill = '#ECECEC'),
+        legend.position = 'top',#c(0.85, 0.95),
+        legend.background = element_rect(fill=NA),
+        legend.key = element_rect(fill = '#ECECEC'),
+        legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, size = 8, hjust = 1)
+  ) +
+  scale_fill_manual(values = 'black') + 
+  scale_linetype_manual(values = 'dotted') +
+  guides(linetype = guide_legend(override.aes = list(colour = 'blue')))
+
 
 p2 <- ggplot(otb_hydr, aes(x=Date, y=hyd_est)) +
   geom_point(alpha=0) +
