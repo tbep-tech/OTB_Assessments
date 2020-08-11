@@ -14,13 +14,12 @@ library(tidyverse)
 library(lubridate)
 library(tbeptools)
 library(patchwork)
-library(ggbeeswarm
-        )
+library(ggbeeswarm)
 
-start <- "2019-01-01"
-end <- "2019-12-31"
+start <- "2020-01-01"
+end <- "2020-12-31"
 
-pth <- 'T:/03_BOARDS_COMMITTEES/05_TBNMC/BAY_TARGETS/2019_update/data-raw/epchc.xlsx '
+pth <- 'D:/data/EPCHC_WQ/epchc.xlsx'
 
 chldat <- read_importwq(pth, download_latest_epchc = F)
 
@@ -34,29 +33,30 @@ tia_rainfall <- ncdc(datasetid = "GHCND", stationid = "GHCND:USW00012842",
 
 # convert rain data to inches data to inches
 tia_rain <- tia_rainfall$data %>%
-             mutate(daily_in = value/254,
+             mutate(daily_in = (value/254),
                     Date = as.Date(date))
 
 # get hydrological data
 bkr<- readNWISdv("02307359", "00060", start, end) %>%
       renameNWISColumns() %>%
-      mutate(bkr_flow = (Flow-(mean(Flow)))*0.892998604)
+      mutate(bkr_flow = (Flow*3.05119225))
 
 otb_hydr <- left_join(tia_rain, bkr, by=c("Date")) %>%
             select(Date, daily_in, bkr_flow) %>%
-            mutate(hyd_est = 154.22+(8.12*bkr_flow)+(6.73*daily_in))
+            mutate(hyd_est = (154.22+(8.12*bkr_flow)+(6.73*daily_in))/365) %>% 
+            drop_na(hyd_est)
 ```
 
 
 ```{r fig.height = 7, fig.width = 8}
 
-p1 <- show_boxplot(chldat, bay_segment = 'OTB', yrrng = c(1975, 2019)) +
+p1 <- show_boxplot(chldat, bay_segment = 'OTB', yrrng = c(1975, 2020)) +
   theme(
     axis.text.x = element_blank()
   )
 
 bay_segment <- 'OTB'
-yrrng <- c(1975, 2019)
+yrrng <- c(1975, 2020)
 ptsz <- 2
 
 # default targets from data file
@@ -96,7 +96,7 @@ toplo1 <- aves %>%
   mutate(
     yrcat = case_when(
       yr < 2008 ~ '1975-2007', 
-      yr >= 2008 ~ '2008-2018'
+      yr >= 2008 ~ '2008-2019'
     )
   )
 
@@ -107,9 +107,9 @@ toplo2 <- aves %>%
 p1 <- ggplot() +
   geom_boxplot(data = toplo1, aes(x = mo, y = val), outlier.colour = NA) +
   geom_beeswarm(data = toplo1, aes(x = mo, y = val, colour = yrcat), size = ptsz, alpha = 0.6) +
-  geom_point(data = toplo2, aes(x = mo, y = val, fill = '2019'), pch = 21, color = 'black', size = 4, alpha = 0.7) +
-  geom_hline(aes(yintercept = thrnum, linetype = '+2 se'), colour = 'blue') +
-  geom_text(aes(x = factor('Jan'), max(aves$val)), parse = TRUE, label = trglab, hjust = 0.2, vjust = 1, colour = 'blue') +
+  geom_point(data = toplo2, aes(x = mo, y = val, fill = '2020'), pch = 21, color = 'black', size = 4, alpha = 0.7) +
+  geom_hline(aes(yintercept = thrnum, linetype = 'Annual Threshold'), colour = 'blue') +
+  geom_text(aes(x = factor('Jan'), thrnum), parse = TRUE, label = trglab, hjust = 0.2, vjust = -0.2, colour = 'blue') +
   labs(y = axlab, title = ttl) +
   theme(axis.title.x = element_blank(),
         panel.grid.minor=element_blank(),
@@ -128,9 +128,11 @@ p1 <- ggplot() +
 
 p2 <- ggplot(otb_hydr, aes(x=Date, y=hyd_est)) +
   geom_point(alpha=0) +
-  geom_hline(aes(yintercept = min(otb_hydr$hyd_est))) +
-  geom_linerange(aes(x=Date, ymax=otb_hydr$hyd_est, ymin=min(otb_hydr$hyd_est))) +
-  scale_x_date(date_breaks = '1 month', date_labels = '%b') +
+  geom_hline(aes(yintercept = min(hyd_est))) +
+  geom_linerange(aes(x=Date, ymax=hyd_est, ymin=min(hyd_est))) +
+  scale_x_date(date_breaks = '1 month', date_labels = '%b', 
+               limits = as.Date(c(start, "2020-11-30"))) +
+  scale_y_continuous(limits = c(0, 25)) +
   theme(
     axis.title.x = element_blank(),
     panel.background = element_rect(fill = '#ECECEC'),
