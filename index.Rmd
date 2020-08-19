@@ -15,9 +15,7 @@ library(lubridate)
 library(tbeptools)
 library(patchwork)
 library(ggbeeswarm)
-
-start <- "2020-01-01"
-end <- "2020-12-31"
+library(xlsx)
 
 pth <- 'D:/data/EPCHC_WQ/epchc.xlsx'
 
@@ -26,12 +24,15 @@ chldat <- read_importwq(pth, download_latest_epchc = F)
 # key for noaa data
 mykey <- Sys.getenv("NOAA_KEY")
 
-# get rainfll data at station
+start <- "2020-01-01"
+end <- "2020-12-31"
+
+# get rainfall data at station
 tia_rainfall <- ncdc(datasetid = "GHCND", stationid = "GHCND:USW00012842",
                      datatypeid = "PRCP", startdate = start, enddate = end,
                      limit = 500, add_units = TRUE, token = mykey)
 
-# convert rain data to inches data to inches
+# convert rain data to inches
 tia_rain <- tia_rainfall$data %>%
              mutate(daily_in = (value/254),
                     Date = as.Date(date))
@@ -45,6 +46,12 @@ otb_hydr <- left_join(tia_rain, bkr, by=c("Date")) %>%
             select(Date, daily_in, bkr_flow) %>%
             mutate(hyd_est = (154.22+(8.12*bkr_flow)+(6.73*daily_in))/365) %>% 
             drop_na(hyd_est)
+
+#write.xlsx(otb_hydr,"2020.xlsx", sheetName = "data")
+#file.names = list.files(pattern="xlsx$")
+#df.list = lapply(file.names, read.xlsx, sheetIndex=1, header=TRUE)
+#df = do.call(rbind, df.list)
+#write.xlsx(df, "OTB_Hydro_1985-2020.xlsx", sheetName="data", row.names=FALSE)
 ```
 
 
@@ -149,4 +156,6 @@ p2 <- ggplot(otb_hydr, aes(x=Date, y=hyd_est)) +
   )
 
 p1 + p2 + plot_layout(ncol = 1, heights = c(1, 0.3))
+
+show_boxplot(chldat, yrsel = 2020, bay_segment = c("OTB"), partialyr = TRUE)
 ```

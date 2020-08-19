@@ -1,0 +1,161 @@
+---
+output: 
+  html_document:
+    code_folding: hide
+---
+```{r hydro, include=F}
+knitr::opts_chunk$set(echo = T, message = F, warning = F, fig.path = 'figures/')
+
+library(dataRetrieval)
+library(rnoaa)
+library(purrr)
+library(tidyverse)
+library(lubridate)
+
+
+# These steps outline the process to generate a daily hydrologic input estimate for OTB, utilizing the methodologies develop in TBEP Tech Pub #03-16. Right now the process can only be done a year at a time, due to the NOAA/USGS web api limitations (as far as I can tell). Multiple years could probably be achieved using a function loop or other script.
+
+# key for noaa data
+mykey <- Sys.getenv("NOAA_KEY")
+
+start <- "2020-01-01"
+end <- "2020-12-31"
+
+# get rainfall data at station
+tia_rainfall <- ncdc(datasetid = "GHCND", stationid = "GHCND:USW00012842",
+                     datatypeid = "PRCP", startdate = start, enddate = end,
+                     limit = 500, add_units = TRUE, token = mykey)
+
+# convert rain data to inches
+tia_rain <- tia_rainfall$data %>%
+             mutate(daily_in = (value/254),
+                    Date = as.Date(date))
+
+# get hydrological data
+bkr<- readNWISdv("02307359", "00060", start, end) %>%
+      renameNWISColumns() %>%
+      mutate(bkr_flow = (Flow*3.05119225))
+
+otb_hydr <- left_join(tia_rain, bkr, by=c("Date")) %>%
+            select(Date, daily_in, bkr_flow) %>%
+            mutate(hyd_est = (154.22+(8.12*bkr_flow)+(6.73*daily_in))/365) %>% 
+            drop_na(hyd_est)
+
+```
+
+
+```{r data_mash, include=F}
+library(tbeptools)
+library(patchwork)
+library(ggbeeswarm)
+library(xlsx)
+library(runner)
+library(ggpubr)
+library(car)
+library(multcompView)
+library(lsmeans)
+
+#Very draft data mash up and analyses.
+
+pth <- 'D:/data/EPCHC_WQ/epchc.xlsx'
+
+chldat <- read_importwq(pth, download_latest = F)
+
+otb_hydr <- read.xlsx("OTB_Hydro_1985-2020.xlsx", sheetName = "data")
+daily_chla <- chldat %>%
+  select(bay_segment, date = SampleTime, chla) %>%
+  dplyr::filter(bay_segment == !!bay_segment) %>% 
+  mutate(date = as.Date(date)) %>%
+  group_by(bay_segment, date) %>%
+  summarise(chla = mean(chla, na.rm = T), .groups = 'drop') %>%
+  na.omit
+
+daily_data <- left_join(otb_hydr, daily_chla, by='date')
+
+daily_data2 <- daily_data %>% 
+               mutate(mo = month(date),
+                      year = year(date),
+                      Period = ifelse(date<'2008-05-01','Pre-Pyro (<2008)','Post-Pyro (>2008)'),
+                      Season = ifelse(mo >= 5 & mo <=9,'Summer (May-Sep)','All other months'),
+                      running7 = sum_run(x = hyd_est, k = 7, idx = as.Date(date)),
+                      running14 = sum_run(x = hyd_est, k = 14, idx = as.Date(date)),
+                      running28 = sum_run(x = hyd_est, k = 28, idx = as.Date(date)),
+                      running35 = sum_run(x = hyd_est, k = 35, idx = as.Date(date)),
+                      running42 = sum_run(x = hyd_est, k = 42, idx = as.Date(date)),
+                      running56 = sum_run(x = hyd_est, k = 56, idx = as.Date(date)),
+                      running70 = sum_run(x = hyd_est, k = 70, idx = as.Date(date)),
+                      running84 = sum_run(x = hyd_est, k = 84, idx = as.Date(date)),) %>%
+                      filter(date>'1985-04-01') %>% 
+                      drop_na(chla)
+
+plot(daily_data$hyd_est, daily_data$chla)
+
+plot(daily_data2$running35, daily_data2$chla)
+cor(daily_data2$running35, daily_data2$chla)
+
+ggboxplot(daily_data2, x = "Period", y = "chla", color = "Season", ylab = "Mean Chlorophyl-a (ug/L)")
+ggboxplot(daily_data2, x = "Period", y = "running35", color = "Season", ylab = "Cumulative 35-Day Hydro Input (million m3)")
+
+ggline(daily_data2, x = "Period", y = "chla", color = "Season",
+       add = c("mean_se", "jitter"), ylab = "Mean Chlorophyl-a (ug/L)")
+
+options(contrasts = c("contr.sum", "contr.poly"))
+res.aov2 <- lm(chla ~ Period + Season + Period:Season, data = daily_data2)
+Anova(res.aov2, type="III")
+marginal = lsmeans(res.aov2, ~Period:Season)
+CLD(marginal, alpha=0.05, Letters=letters, adjust="tukey")
+
+ggline(daily_data2, x = "Period", y = "running35", color = "Season",
+       add = c("mean_se", "jitter"), ylab = "Cumulative 35-Day Hydro Input (million m3)")
+
+options(contrasts = c("contr.sum", "contr.poly"))
+res.aov3 <- lm(running35 ~ Period + Season + Period:Season, data = daily_data2)
+Anova(res.aov3, type="III")
+marginal2 = lsmeans(res.aov3, ~Period:Season)
+CLD(marginal2, alpha=0.05, Letters=letters, adjust="tukey")
+
+
+ggscatter(daily_data2, x = "running35", y = "chla", color = "Period", ylab = "Mean Chlorophyl-a (ug/L)", xlab = "Cumulative 35-Day Hydro Input (million m3)", add = "reg.line")+
+          stat_regline_equation(aes(label =  paste(..eq.label.., ..rr.label.., sep = "~~~~"), color = Period)
+    )
+
+
+# axis label
+axlab <- expression("Mean Chlorophyll-a ("~ mu * "g\u00B7L"^-1 *")")
+
+
+p3 <- ggplot(daily_data, aes(x=date, y=hyd_est)) +
+  geom_point(alpha=0) +
+  geom_hline(aes(yintercept = 0)) +
+  geom_linerange(aes(x=date, ymax=hyd_est, ymin=0)) +
+  scale_x_date(date_breaks = '12 month', date_labels = '%b-%Y', 
+               limits = as.Date(c("1985-01-01", "2020-11-30")), expand = c(0,0)) +
+  scale_y_continuous(limits = c(0, 25), expand = c(0,0)) +
+  theme(
+    axis.title.x = element_blank(),
+    panel.background = element_rect(fill = '#ECECEC'),
+    panel.grid.minor=element_blank(),
+    panel.grid.major=element_blank(),
+    legend.position = 'top',
+    legend.background = element_rect(fill=NA),
+    legend.key = element_rect(fill = '#ECECEC'),
+    legend.title = element_blank(),
+    axis.text.x = element_text(angle = 45, size = 8, hjust = 1)
+  ) +
+  labs(
+    y = "Hydrologic Load\n(mill m3)"
+  )
+
+p4 <- p3+geom_line(data=daily_data[!is.na(daily_data$chla), ], aes(x=date, y=chla), size=1, color="green") +
+     scale_y_continuous(limits = c(0, 25),
+                     sec.axis = sec_axis(~ . *2, name = axlab), expand = c(0,0))
+p3
+p4
+
+#write.xlsx(otb_hydr,"2020.xlsx", sheetName = "data")
+#file.names = list.files(pattern="xlsx$")
+#df.list = lapply(file.names, read.xlsx, sheetIndex=1, header=TRUE)
+#df = do.call(rbind, df.list)
+#write.xlsx(df, "OTB_Hydro_1985-2020.xlsx", sheetName="data", row.names=FALSE)
+```
+
