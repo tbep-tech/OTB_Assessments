@@ -1,11 +1,10 @@
 ---
 output: 
-  html_document:
-    code_folding: hide
+  html_document
 ---
 
-```{r setup, include=F}
-knitr::opts_chunk$set(echo = T, message = F, warning = F, fig.path = 'figures/')
+```{r setup, include = F, echo = F, message = F, warning = F}
+knitr::opts_chunk$set(echo = F, message = F, warning = F, fig.path = 'figures/')
 
 library(dataRetrieval)
 library(rnoaa)
@@ -15,7 +14,6 @@ library(lubridate)
 library(tbeptools)
 library(patchwork)
 library(ggbeeswarm)
-library(xlsx)
 
 source('R/funcs.R')
 
@@ -25,135 +23,347 @@ chldat <- read_importwq(pth, download_latest = T)
 
 # key for noaa data
 noaa_key <- Sys.getenv("NOAA_KEY")
-
-start <- "2020-01-01"
-end <- "2020-12-31"
-
-hydroests <- load_est(start, end, noaa_key)
-
-# get rainfall data at station
-tia_rainfall <- ncdc(datasetid = "GHCND", stationid = "GHCND:USW00012842",
-                     datatypeid = "PRCP", startdate = start, enddate = end,
-                     limit = 500, add_units = TRUE, token = noaa_key)
-
-# convert rain data to inches
-tia_rain <- tia_rainfall$data %>%
-             mutate(daily_in = (value/254),
-                    Date = as.Date(date))
-
-# get hydrological data
-bkr<- readNWISdv("02307359", "00060", start, end) %>%
-      renameNWISColumns() %>%
-      mutate(bkr_flow = (Flow*3.05119225))
-
-otb_hydr <- left_join(tia_rain, bkr, by=c("Date")) %>%
-            select(Date, daily_in, bkr_flow) %>%
-            mutate(hyd_est = (154.22+(8.12*bkr_flow)+(6.73*daily_in))/365) %>% 
-            drop_na(hyd_est)
 ```
 
+# {.tabset}
+
+## 2020 {.tabset .tabset-pills}
+
+```{r}
+yrsel <- 2020
+hydroests <- hydroload_est(yrsel, noaa_key)
+```
+
+### OTB 
 
 ```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('OTB', chldat, hydroests, yrsel)
+```
 
-p1 <- show_boxplot(chldat, bay_segment = 'OTB', yrrng = c(1975, 2020)) +
-  theme(
-    axis.text.x = element_blank()
-  )
+### HB 
 
-bay_segment <- 'OTB'
-yrrng <- c(1975, 2020)
-ptsz <- 2
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('HB', chldat, hydroests, yrsel)
+```
 
-# default targets from data file
-trgs <- targets
-yrsel <- max(yrrng)
+### MTB 
 
-# monthly averages
-aves <- anlz_avedat(chldat) %>%
-  .$'mos' %>%
-  dplyr::filter(var %in% 'mean_chla') %>%
-  dplyr::filter(bay_segment == !!bay_segment) %>%
-  dplyr::mutate(
-    var = 'yval',
-    mo = month(mo, label = T)
-  )
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('MTB', chldat, hydroests, yrsel)
+```
 
-# axis label
-axlab <- expression("Mean Monthly Chlorophyll-a ("~ mu * "g\u00B7L"^-1 *")")
+### LTB 
 
-# get lines to plot
-thrnum <- trgs %>%
-  dplyr::filter(bay_segment %in% !!bay_segment) %>%
-  dplyr::pull(chla_thresh)
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('LTB', chldat, hydroests, yrsel)
+```
 
-# threshold label
-trglab <- paste(thrnum, "~ mu * g%.%L^{-1}")
+## 2019 {.tabset .tabset-pills}
 
-# bay segment plot title
-ttl <- trgs %>%
-  dplyr::filter(bay_segment %in% !!bay_segment) %>%
-  dplyr::pull(name)
+```{r}
+yrsel <- 2019
+hydroests <- hydroload_est(yrsel, noaa_key)
+```
 
-# toplo1 is all but current year
-toplo1 <- aves %>%
-  dplyr::filter(yr >= yrrng[1] & yr <= yrrng[2]) %>%
-  dplyr::filter(!yr %in% yrsel) %>% 
-  mutate(
-    yrcat = case_when(
-      yr < 2008 ~ '1975-2007', 
-      yr >= 2008 ~ '2008-2019'
-    )
-  )
+### OTB 
 
-# toplo2 is current year
-toplo2 <- aves %>%
-  dplyr::filter(yr %in% yrsel)
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('OTB', chldat, hydroests, yrsel)
+```
 
-p1 <- ggplot() +
-  geom_boxplot(data = toplo1, aes(x = mo, y = val), outlier.colour = NA) +
-  geom_beeswarm(data = toplo1, aes(x = mo, y = val, colour = yrcat), size = ptsz, alpha = 0.6) +
-  geom_point(data = toplo2, aes(x = mo, y = val, fill = '2020'), pch = 21, color = 'black', size = 4, alpha = 0.7) +
-  geom_hline(aes(yintercept = thrnum, linetype = 'Annual Threshold'), colour = 'blue') +
-  geom_text(aes(x = factor('Jan'), thrnum), parse = TRUE, label = trglab, hjust = 0.2, vjust = -0.2, colour = 'blue') +
-  labs(y = axlab, title = ttl) +
-  theme(axis.title.x = element_blank(),
-        panel.grid.minor=element_blank(),
-        panel.grid.major=element_blank(),
-        panel.background = element_rect(fill = '#ECECEC'),
-        legend.position = 'top',#c(0.85, 0.95),
-        legend.background = element_rect(fill=NA),
-        legend.key = element_rect(fill = '#ECECEC'),
-        legend.title = element_blank(),
-        axis.text.x = element_text(angle = 45, size = 8, hjust = 1)
-  ) +
-  scale_fill_manual(values = 'black') + 
-  scale_linetype_manual(values = 'dotted') +
-  guides(linetype = guide_legend(override.aes = list(colour = 'blue')))
+### HB 
 
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('HB', chldat, hydroests, yrsel)
+```
 
-p2 <- ggplot(otb_hydr, aes(x=Date, y=hyd_est)) +
-  geom_point(alpha=0) +
-  geom_hline(aes(yintercept = min(hyd_est))) +
-  geom_linerange(aes(x=Date, ymax=hyd_est, ymin=min(hyd_est))) +
-  scale_x_date(date_breaks = '1 month', date_labels = '%b', 
-               limits = as.Date(c(start, "2020-11-30"))) +
-  scale_y_continuous(limits = c(0, 25)) +
-  theme(
-    axis.title.x = element_blank(),
-    panel.background = element_rect(fill = '#ECECEC'),
-    panel.grid.minor=element_blank(),
-    panel.grid.major=element_blank(),
-    legend.position = 'top',
-    legend.background = element_rect(fill=NA),
-    legend.key = element_rect(fill = '#ECECEC'),
-    legend.title = element_blank(),
-    axis.text.x = element_text(angle = 45, size = 8, hjust = 1)
-  ) +
-  labs(
-    y = "Hydrologic Load\n(mill m3)"
-  )
+### MTB 
 
-p1 + p2 + plot_layout(ncol = 1, heights = c(1, 0.3))
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('MTB', chldat, hydroests, yrsel)
+```
 
-show_boxplot(chldat, yrsel = 2020, bay_segment = c("OTB"), partialyr = TRUE)
+### LTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('LTB', chldat, hydroests, yrsel)
+```
+
+## 2018 {.tabset .tabset-pills}
+
+```{r}
+yrsel <- 2018
+hydroests <- hydroload_est(yrsel, noaa_key)
+```
+
+### OTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('OTB', chldat, hydroests, yrsel)
+```
+
+### HB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('HB', chldat, hydroests, yrsel)
+```
+
+### MTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('MTB', chldat, hydroests, yrsel)
+```
+
+### LTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('LTB', chldat, hydroests, yrsel)
+```
+
+## 2017 {.tabset .tabset-pills}
+
+```{r}
+yrsel <- 2017
+hydroests <- hydroload_est(yrsel, noaa_key)
+```
+
+### OTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('OTB', chldat, hydroests, yrsel)
+```
+
+### HB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('HB', chldat, hydroests, yrsel)
+```
+
+### MTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('MTB', chldat, hydroests, yrsel)
+```
+
+### LTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('LTB', chldat, hydroests, yrsel)
+```
+
+## 2016 {.tabset .tabset-pills}
+
+```{r}
+yrsel <- 2016
+hydroests <- hydroload_est(yrsel, noaa_key)
+```
+
+### OTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('OTB', chldat, hydroests, yrsel)
+```
+
+### HB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('HB', chldat, hydroests, yrsel)
+```
+
+### MTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('MTB', chldat, hydroests, yrsel)
+```
+
+### LTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('LTB', chldat, hydroests, yrsel)
+```
+
+## 2015 {.tabset .tabset-pills}
+
+```{r}
+yrsel <- 2015
+hydroests <- hydroload_est(yrsel, noaa_key)
+```
+
+### OTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('OTB', chldat, hydroests, yrsel)
+```
+
+### HB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('HB', chldat, hydroests, yrsel)
+```
+
+### MTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('MTB', chldat, hydroests, yrsel)
+```
+
+### LTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('LTB', chldat, hydroests, yrsel)
+```
+
+## 2014 {.tabset .tabset-pills}
+
+```{r}
+yrsel <- 2014
+hydroests <- hydroload_est(yrsel, noaa_key)
+```
+
+### OTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('OTB', chldat, hydroests, yrsel)
+```
+
+### HB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('HB', chldat, hydroests, yrsel)
+```
+
+### MTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('MTB', chldat, hydroests, yrsel)
+```
+
+### LTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('LTB', chldat, hydroests, yrsel)
+```
+
+## 2013 {.tabset .tabset-pills}
+
+```{r}
+yrsel <- 2013
+hydroests <- hydroload_est(yrsel, noaa_key)
+```
+
+### OTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('OTB', chldat, hydroests, yrsel)
+```
+
+### HB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('HB', chldat, hydroests, yrsel)
+```
+
+### MTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('MTB', chldat, hydroests, yrsel)
+```
+
+### LTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('LTB', chldat, hydroests, yrsel)
+```
+
+## 2012 {.tabset .tabset-pills}
+
+```{r}
+yrsel <- 2012
+hydroests <- hydroload_est(yrsel, noaa_key)
+```
+
+### OTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('OTB', chldat, hydroests, yrsel)
+```
+
+### HB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('HB', chldat, hydroests, yrsel)
+```
+
+### MTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('MTB', chldat, hydroests, yrsel)
+```
+
+### LTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('LTB', chldat, hydroests, yrsel)
+```
+
+## 2011 {.tabset .tabset-pills}
+
+```{r}
+yrsel <- 2011
+hydroests <- hydroload_est(yrsel, noaa_key)
+```
+
+### OTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('OTB', chldat, hydroests, yrsel)
+```
+
+### HB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('HB', chldat, hydroests, yrsel)
+```
+
+### MTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('MTB', chldat, hydroests, yrsel)
+```
+
+### LTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('LTB', chldat, hydroests, yrsel)
+```
+
+## 2010 {.tabset .tabset-pills}
+
+```{r}
+yrsel <- 2010
+hydroests <- hydroload_est(yrsel, noaa_key)
+```
+
+### OTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('OTB', chldat, hydroests, yrsel)
+```
+
+### HB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('HB', chldat, hydroests, yrsel)
+```
+
+### MTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('MTB', chldat, hydroests, yrsel)
+```
+
+### LTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('LTB', chldat, hydroests, yrsel)
 ```
