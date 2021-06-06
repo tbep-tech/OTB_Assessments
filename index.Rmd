@@ -17,20 +17,24 @@ library(patchwork)
 library(ggbeeswarm)
 library(xlsx)
 
-pth <- 'D:/data/EPCHC_WQ/epchc.xlsx'
+source('R/funcs.R')
 
-chldat <- read_importwq(pth, download_latest_epchc = F)
+pth <- 'data/raw/epchc.xlsx'
+
+chldat <- read_importwq(pth, download_latest = T)
 
 # key for noaa data
-mykey <- Sys.getenv("NOAA_KEY")
+noaa_key <- Sys.getenv("NOAA_KEY")
 
 start <- "2020-01-01"
 end <- "2020-12-31"
 
+hydroests <- load_est(start, end, noaa_key)
+
 # get rainfall data at station
 tia_rainfall <- ncdc(datasetid = "GHCND", stationid = "GHCND:USW00012842",
                      datatypeid = "PRCP", startdate = start, enddate = end,
-                     limit = 500, add_units = TRUE, token = mykey)
+                     limit = 500, add_units = TRUE, token = noaa_key)
 
 # convert rain data to inches
 tia_rain <- tia_rainfall$data %>%
@@ -46,12 +50,6 @@ otb_hydr <- left_join(tia_rain, bkr, by=c("Date")) %>%
             select(Date, daily_in, bkr_flow) %>%
             mutate(hyd_est = (154.22+(8.12*bkr_flow)+(6.73*daily_in))/365) %>% 
             drop_na(hyd_est)
-
-#write.xlsx(otb_hydr,"2020.xlsx", sheetName = "data")
-#file.names = list.files(pattern="xlsx$")
-#df.list = lapply(file.names, read.xlsx, sheetIndex=1, header=TRUE)
-#df = do.call(rbind, df.list)
-#write.xlsx(df, "OTB_Hydro_1985-2020.xlsx", sheetName="data", row.names=FALSE)
 ```
 
 
