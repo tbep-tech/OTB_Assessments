@@ -43,13 +43,13 @@ hydroload_est <- function(yrsel, noaa_key){
   HB <- full_join(ar, hr, by = 'Date') %>%
     mutate(
       bs = 'HB',
-      est = 197.08+(1.84*ar_flow)+(1.91*hr_flow)
+      est = (197.08+(1.84*ar_flow)+(1.91*hr_flow))/365
       ) %>%
     select(bs, Date, est)
 
   OTB <- left_join(tia_rain, bkr, by = 'Date') %>%
     mutate(
-      est = 154.22+(8.12*bkr_flow)+(6.73*daily_in),
+      est = (154.22+(8.12*bkr_flow)+(6.73*daily_in))/365,
       bs = 'OTB'
     ) %>%
     select(bs, Date, est)
@@ -57,7 +57,7 @@ hydroload_est <- function(yrsel, noaa_key){
   MTB <- left_join(sp_rain, lmr, by = 'Date') %>%
     mutate(
       bs = 'MTB',
-      est = -13.78+(1.64*lmr_flow)+(8.68*daily_in),
+      est = (-13.78+(1.64*lmr_flow)+(8.68*daily_in))/365,
     ) %>%
     select(bs, Date, est)
 
@@ -65,7 +65,7 @@ hydroload_est <- function(yrsel, noaa_key){
     left_join(mr, by = 'Date') %>%
     mutate(
       bs = 'LTB',
-      est = 87.08+(3.69*daily_in)+(0.79*wl_flow)+(0.62*mr_flow),
+      est = (87.08+(3.69*daily_in)+(0.79*wl_flow)+(0.62*mr_flow))/365,
     ) %>%
     select(bs, Date, est)
 

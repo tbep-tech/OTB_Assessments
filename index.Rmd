@@ -367,3 +367,65 @@ chlhydplo_fun('MTB', chldat, hydroests, yrsel)
 ```{r fig.height = 7, fig.width = 8}
 chlhydplo_fun('LTB', chldat, hydroests, yrsel)
 ```
+
+## 2009 {.tabset .tabset-pills}
+
+```{r}
+yrsel <- 2009
+hydroests <- hydroload_est(yrsel, noaa_key)
+```
+
+### OTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('OTB', chldat, hydroests, yrsel)
+```
+
+### HB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('HB', chldat, hydroests, yrsel)
+```
+
+### MTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('MTB', chldat, hydroests, yrsel)
+```
+
+### LTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('LTB', chldat, hydroests, yrsel)
+```
+
+## 2008 {.tabset .tabset-pills}
+
+```{r}
+yrsel <- 2008
+hydroests <- hydroload_est(yrsel, noaa_key)
+```
+
+### OTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('OTB', chldat, hydroests, yrsel)
+```
+
+### HB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('HB', chldat, hydroests, yrsel)
+```
+
+### MTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('MTB', chldat, hydroests, yrsel)
+```
+
+### LTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('LTB', chldat, hydroests, yrsel)
+```
