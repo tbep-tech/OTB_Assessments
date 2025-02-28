@@ -27,6 +27,44 @@ noaa_key <- Sys.getenv("NOAA_KEY")
 
 # {.tabset}
 
+## 2021 {.tabset .tabset-pills}
+
+```{r}
+yrsel <- 2021
+hydroests <- hydroload_est(yrsel, noaa_key)
+
+#Forcing the hydroests plot until the end of the current calendar year
+bs <- c("HB", "OTB", "MTB", "LTB")
+Date <- as.Date(c("2021-12-31", "2021-12-31", "2021-12-31", "2021-12-31"))
+est <- c(NA, NA, NA, NA)
+hydroests2 <- data.frame(bs,Date,est)
+hydroests <- rbind(hydroests, hydroests2)  
+```
+
+### OTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('OTB', chldat, hydroests, yrsel)
+```
+
+### HB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('HB', chldat, hydroests, yrsel)
+```
+
+### MTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('MTB', chldat, hydroests, yrsel)
+```
+
+### LTB 
+
+```{r fig.height = 7, fig.width = 8}
+chlhydplo_fun('LTB', chldat, hydroests, yrsel)
+```
+
 ## 2020 {.tabset .tabset-pills}
 
 ```{r}
